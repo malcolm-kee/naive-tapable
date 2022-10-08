@@ -11,7 +11,7 @@ The goals of this repo are:
 ## Progress
 
 - [x] SyncHook
-- [ ] SyncBailHook
+- [x] SyncBailHook
 - [ ] SyncWaterfallHook
 - [ ] SyncLoopHook
 - [ ] AsyncParallelHook
