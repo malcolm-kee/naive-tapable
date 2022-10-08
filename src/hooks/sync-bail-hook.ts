@@ -28,30 +28,22 @@ export class SyncBailHook {
     const finalCb = params.pop();
 
     try {
-      for (const tap of this.taps) {
-        const result = tap.fn(...params);
-        if (typeof result !== 'undefined') {
-          finalCb(null, result);
-          return;
-        }
+      const result = this.call(...params);
+
+      if (typeof result !== 'undefined') {
+        finalCb(null, result);
+      } else {
+        finalCb();
       }
     } catch (err) {
       finalCb(err);
-      return;
     }
-
-    finalCb();
   }
 
   promise(...params: any[]): Promise<any> {
     return new Promise<any>((fulfill) => {
-      for (const tap of this.taps) {
-        const result = tap.fn(...params);
-        if (typeof result !== 'undefined') {
-          return fulfill(result);
-        }
-      }
-      fulfill(undefined);
+      const result = this.call(...params);
+      fulfill(result);
     });
   }
 }

@@ -22,10 +22,7 @@ export class SyncHook {
     const callBack = args.pop();
 
     try {
-      for (const tap of this.taps) {
-        tap.fn(...args);
-      }
-
+      this.call(...args);
       callBack();
     } catch (err) {
       callBack(err);
@@ -34,10 +31,7 @@ export class SyncHook {
 
   promise(...args: any[]) {
     return new Promise<void>((fulfill) => {
-      for (const tap of this.taps) {
-        tap.fn(...args);
-      }
-
+      this.call(...args);
       fulfill();
     });
   }
