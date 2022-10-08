@@ -4,7 +4,7 @@ import { SyncHook } from './sync-hook';
 
 describe('SyncHook', () => {
   const scenarios = [
-    { name: 'tapable', hook: SyncHook },
+    { name: 'tapable', hook: ActualSyncHook as any as typeof SyncHook },
     { name: 'our', hook: SyncHook },
   ];
 
@@ -37,14 +37,14 @@ describe('SyncHook', () => {
         });
 
         const actualCb = vi.fn((...args) => args);
-        const actualErrorCb = vi.fn(() => resolve());
+        const actualFinalCb = vi.fn(() => resolve());
         actualTapable.tap('actualCb', actualCb);
-        actualTapable.callAsync('What', true, actualErrorCb);
+        actualTapable.callAsync('What', true, actualFinalCb);
 
         await promise;
 
-        expect(actualErrorCb).toHaveBeenCalledOnce();
-        expect(actualErrorCb).toHaveBeenLastCalledWith();
+        expect(actualFinalCb).toHaveBeenCalledOnce();
+        expect(actualFinalCb).toHaveBeenLastCalledWith();
         expect(actualCb).toHaveBeenCalledOnce();
         expect(actualCb).toHaveBeenLastCalledWith('What', true);
 

@@ -7,6 +7,7 @@ describe('exports', () => {
     if (!['__esModule', 'default'].includes(key)) {
       it(`export ${key}`, () => {
         expect(key in naiveTapableExports).toBe(true);
+        expect((naiveTapableExports as any)[key]).toBeDefined();
       });
     }
   });
