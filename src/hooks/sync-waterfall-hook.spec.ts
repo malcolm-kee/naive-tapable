@@ -1,6 +1,7 @@
 import { SyncWaterfallHook as ActualHook } from 'tapable';
 import { describe, expect, it, vi } from 'vitest';
 import { SyncWaterfallHook } from './sync-waterfall-hook';
+import { createAsyncCallback } from './utils/test-helper';
 
 describe('SyncWaterfallHook', () => {
   it('has same name', () => {
@@ -277,11 +278,7 @@ describe('SyncWaterfallHook', () => {
         tapable.tap('times3', times3);
         tapable.tap('square', square);
 
-        let resolve: () => void;
-        const promise = new Promise<void>((fulfill) => {
-          resolve = fulfill;
-        });
-        const finalCb = vi.fn(() => resolve());
+        const { cb: finalCb, promise } = createAsyncCallback();
 
         const resultObj: Params[1] = [];
 
@@ -358,11 +355,7 @@ describe('SyncWaterfallHook', () => {
         tapable.tap('square', square);
 
         const resultObj: Params[1] = [];
-        let resolve: () => void;
-        const promise = new Promise<void>((fulfill) => {
-          resolve = fulfill;
-        });
-        const finalCb = vi.fn(() => resolve());
+        const { cb: finalCb, promise } = createAsyncCallback();
 
         tapable.callAsync(12, resultObj, finalCb);
 
@@ -440,11 +433,7 @@ describe('SyncWaterfallHook', () => {
         tapable.tap('square', square);
 
         const resultObj: Params[1] = [];
-        let resolve: () => void;
-        const promise = new Promise<void>((fulfill) => {
-          resolve = fulfill;
-        });
-        const finalCb = vi.fn(() => resolve());
+        const { cb: finalCb, promise } = createAsyncCallback();
 
         tapable.callAsync(12, resultObj, finalCb);
 

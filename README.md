@@ -13,7 +13,7 @@ The goals of this repo are:
 - [x] SyncHook
 - [x] SyncBailHook
 - [x] SyncWaterfallHook
-- [ ] SyncLoopHook
+- [x] SyncLoopHook
 - [ ] AsyncParallelHook
 - [ ] AsyncParallelBailHook
 - [ ] AsyncSeriesHook

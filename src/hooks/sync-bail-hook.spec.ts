@@ -1,6 +1,7 @@
 import { SyncBailHook as ActualSyncBailHook } from 'tapable';
 import { describe, expect, it, vi } from 'vitest';
 import { SyncBailHook } from './sync-bail-hook';
+import { createAsyncCallback } from './utils/test-helper';
 
 describe('SyncBailHook', () => {
   const scenarios = [
@@ -75,11 +76,7 @@ describe('SyncBailHook', () => {
         tapable.tap('cb2', cb2);
         tapable.tap('cb3', cb3);
 
-        let resolve: () => void;
-        const promise = new Promise<void>((fulfill) => {
-          resolve = fulfill;
-        });
-        const finalCb = vi.fn(() => resolve());
+        const { cb: finalCb, promise } = createAsyncCallback();
 
         tapable.callAsync('malcolm', 5, finalCb);
 
@@ -106,11 +103,7 @@ describe('SyncBailHook', () => {
         tapable.tap('cb2', cb2);
         tapable.tap('cb3', cb3);
 
-        let resolve: () => void;
-        const promise = new Promise<void>((fulfill) => {
-          resolve = fulfill;
-        });
-        const finalCb = vi.fn(() => resolve());
+        const { cb: finalCb, promise } = createAsyncCallback();
 
         tapable.callAsync('malcolm', 5, finalCb);
 
@@ -139,11 +132,7 @@ describe('SyncBailHook', () => {
         tapable.tap('cb2', cb2);
         tapable.tap('cb3', cb3);
 
-        let resolve: () => void;
-        const promise = new Promise<void>((fulfill) => {
-          resolve = fulfill;
-        });
-        const finalCb = vi.fn(() => resolve());
+        const { cb: finalCb, promise } = createAsyncCallback();
 
         tapable.callAsync('malcolm', 5, finalCb);
 

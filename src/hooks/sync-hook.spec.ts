@@ -1,6 +1,7 @@
 import { SyncHook as ActualSyncHook } from 'tapable';
 import { describe, expect, it, vi } from 'vitest';
 import { SyncHook } from './sync-hook';
+import { createAsyncCallback } from './utils/test-helper';
 
 describe('SyncHook', () => {
   const scenarios = [
@@ -31,14 +32,10 @@ describe('SyncHook', () => {
       it(`works for ${scenario.name}`, async () => {
         const actualTapable = new scenario.hook(['param1', 'param2'], 'myTapable');
 
-        let resolve: () => void;
-        const promise = new Promise<void>((fulfill) => {
-          resolve = fulfill;
-        });
-
         const actualCb = vi.fn((...args) => args);
-        const actualFinalCb = vi.fn(() => resolve());
         actualTapable.tap('actualCb', actualCb);
+
+        const { cb: actualFinalCb, promise } = createAsyncCallback();
         actualTapable.callAsync('What', true, actualFinalCb);
 
         await promise;
@@ -54,11 +51,7 @@ describe('SyncHook', () => {
           throw new Error('Some problem');
         });
 
-        let resolve2: () => void;
-        const promise2 = new Promise<void>((fulfill) => {
-          resolve2 = fulfill;
-        });
-        const actualErrorCb2 = vi.fn(() => resolve2());
+        const { cb: actualErrorCb2, promise: promise2 } = createAsyncCallback();
 
         actualTapable.tap('problem', problematicCb);
         actualTapable.callAsync('Second', false, actualErrorCb2);
