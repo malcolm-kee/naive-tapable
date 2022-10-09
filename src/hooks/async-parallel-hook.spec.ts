@@ -63,23 +63,51 @@ describe('AsyncParallelHook', () => {
         expect(promiseCb).toHaveBeenCalledOnce();
         expect(asyncCb).toHaveBeenCalledOnce();
       });
+
+      it('promise without issue with all sync', async () => {
+        const tapable = new scenario.hook(['name'], 'myHook');
+
+        const cb1 = vi.fn();
+
+        tapable.tap('cb1', cb1);
+        tapable.tap('cb1', cb1);
+        tapable.tap('cb1', cb1);
+
+        await tapable.promise('malcolm');
+
+        expect(cb1).toHaveBeenCalledTimes(3);
+      });
+
+      it('promise without issue with all promises', async () => {
+        const tapable = new scenario.hook(['name'], 'myHook');
+
+        const promiseCb = vi.fn(() => new Promise<void>((fulfill) => setTimeout(fulfill, 50)));
+
+        tapable.tapPromise('promiseCb', promiseCb);
+        tapable.tapPromise('promiseCb', promiseCb);
+        tapable.tapPromise('promiseCb', promiseCb);
+
+        await tapable.promise('malcolm');
+
+        expect(promiseCb).toHaveBeenCalledTimes(3);
+      });
     });
 
     describe(`works for ${scenario.name} with callback issue`, () => {
       const prepareCallbackIssue = () => {
         const tapable = new scenario.hook(['name', 'age'], 'myHook');
 
-        const promiseCb = vi.fn(() => new Promise<void>((fulfill) => setTimeout(fulfill, 50)));
-        const cb1 = vi.fn(() => {
-          throw new Error('error in callback');
-        });
         const asyncCb = vi.fn((_: string, __: number, cb: () => void) =>
           setTimeout(() => cb(), 50)
         );
+        const cb1 = vi.fn(() => {
+          throw new Error('error in callback');
+        });
+        const promiseCb = vi.fn(() => new Promise<void>((fulfill) => setTimeout(fulfill, 50)));
 
-        tapable.tapPromise('promiseCb', promiseCb);
-        tapable.tap('cb1', cb1);
         tapable.tapAsync('asyncCb', asyncCb);
+        tapable.tap('cb1', cb1);
+        tapable.tapPromise('promiseCb', promiseCb);
 
         return {
           tapable,
@@ -94,9 +122,9 @@ describe('AsyncParallelHook', () => {
 
         await expect(tapable.promise('malcolm', 3)).rejects.toThrowError('error in callback');
 
-        expect(promiseCb).toHaveBeenCalledOnce();
+        expect(asyncCb).toHaveBeenCalledOnce();
         expect(cb1).toHaveBeenCalledOnce();
-        expect(asyncCb).not.toHaveBeenCalled();
+        expect(promiseCb).not.toHaveBeenCalled();
       });
 
       it('callAsync with callback issue', async () => {
@@ -109,8 +137,8 @@ describe('AsyncParallelHook', () => {
         expect(cb).toHaveBeenCalledOnce();
         expect(cb.mock.calls[0]).toStrictEqual([expect.any(Error)]);
         expect(cb1).toHaveBeenCalledOnce();
-        expect(promiseCb).toHaveBeenCalledOnce();
-        expect(asyncCb).not.toHaveBeenCalledOnce();
+        expect(asyncCb).toHaveBeenCalledOnce();
+        expect(promiseCb).not.toHaveBeenCalled();
       });
     });
 
@@ -118,20 +146,20 @@ describe('AsyncParallelHook', () => {
       const preparePromiseIssue = () => {
         const tapable = new scenario.hook(['name', 'age'], 'myHook');
 
-        const cb1 = vi.fn();
+        const asyncCb = vi.fn((_: string, __: number, cb: () => void) =>
+          setTimeout(() => cb(), 50)
+        );
         const promiseCb = vi.fn(
           () =>
             new Promise<void>((_, reject) =>
               setTimeout(() => reject(new Error('promise error')), 50)
             )
         );
-        const asyncCb = vi.fn((_: string, __: number, cb: () => void) =>
-          setTimeout(() => cb(), 50)
-        );
+        const cb1 = vi.fn();
 
-        tapable.tap('cb1', cb1);
-        tapable.tapPromise('promiseCb', promiseCb);
         tapable.tapAsync('asyncCb', asyncCb);
+        tapable.tapPromise('promiseCb', promiseCb);
+        tapable.tap('cb1', cb1);
 
         return {
           tapable,
