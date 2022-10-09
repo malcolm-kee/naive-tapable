@@ -74,6 +74,20 @@ describe('AsyncParallelBailHook', () => {
         expect(asyncCb).toHaveBeenCalledOnce();
         expect(asyncCb).toHaveBeenCalledWith('malcolm', 5, expect.any(Function));
       });
+
+      it('promise without bail with all tap only', async () => {
+        const tapable = new scenario.hook(['name', 'age']);
+
+        const cb1 = vi.fn();
+
+        tapable.tap('cb1', cb1);
+        tapable.tap('cb1', cb1);
+        tapable.tap('cb1', cb1);
+
+        await tapable.promise();
+
+        expect(cb1).toHaveBeenCalledTimes(3);
+      });
     });
 
     describe(`${scenario.name} works with bail using cb`, () => {

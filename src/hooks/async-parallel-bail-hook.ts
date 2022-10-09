@@ -81,25 +81,20 @@ export class AsyncParallelBailHook {
           }
           break;
 
-        case 'async':
-          {
-            tap.fn(...params, (error: Error | null, result: any) => {
-              if (error) {
-                return end(error);
-              }
-              if (typeof result !== 'undefined') {
-                return end(null, result);
-              }
-              index++;
-              if (index >= this.taps.length) {
-                finalCb();
-              }
-            });
-          }
-          break;
-
-        default:
-          break;
+        case 'async': {
+          tap.fn(...params, (error: Error | null, result: any) => {
+            if (error) {
+              return end(error);
+            }
+            if (typeof result !== 'undefined') {
+              return end(null, result);
+            }
+            index++;
+            if (index >= this.taps.length) {
+              finalCb();
+            }
+          });
+        }
       }
     }
   }
