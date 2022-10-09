@@ -13,72 +13,64 @@ describe('SyncHook', () => {
     expect(SyncHook.name).toBe(ActualSyncHook.name);
   });
 
-  describe('call', () => {
-    scenarios.forEach((scenario) => {
-      it(`works for ${scenario.name}`, () => {
-        const myTapable = new scenario.hook(['param1', 'param2'], 'myTapable');
-        const myCb = vi.fn();
-        myTapable.tap('myCb', myCb);
-        myTapable.call('What', true);
+  scenarios.forEach((scenario) => {
+    describe(`works for ${scenario.name}`, async () => {
+      const preparePositive = () => {
+        const tapable = new scenario.hook(['param1', 'param2'], 'myTapable');
+        const cb = vi.fn();
+        tapable.tap('cb', cb);
 
-        expect(myCb).toHaveBeenCalledOnce();
-        expect(myCb).toHaveBeenLastCalledWith('What', true);
+        return {
+          tapable,
+          cb,
+        };
+      };
+
+      it(`works for call`, () => {
+        const { tapable, cb } = preparePositive();
+
+        tapable.call('What', true);
+
+        expect(cb).toHaveBeenCalledOnce();
+        expect(cb).toHaveBeenLastCalledWith('What', true);
       });
-    });
-  });
 
-  describe('callAsync', () => {
-    scenarios.forEach((scenario) => {
-      it(`works for ${scenario.name}`, async () => {
-        const actualTapable = new scenario.hook(['param1', 'param2'], 'myTapable');
+      it('works for callAsync', async () => {
+        const { tapable, cb } = preparePositive();
 
-        const actualCb = vi.fn((...args) => args);
-        actualTapable.tap('actualCb', actualCb);
-
-        const { cb: actualFinalCb, promise } = createAsyncCallback();
-        actualTapable.callAsync('What', true, actualFinalCb);
+        const { cb: finalCb, promise } = createAsyncCallback();
+        tapable.callAsync('What', true, finalCb);
 
         await promise;
 
-        expect(actualFinalCb).toHaveBeenCalledOnce();
-        expect(actualFinalCb).toHaveBeenLastCalledWith();
-        expect(actualCb).toHaveBeenCalledOnce();
-        expect(actualCb).toHaveBeenLastCalledWith('What', true);
+        expect(finalCb).toHaveBeenCalledOnce();
+        expect(finalCb).toHaveBeenLastCalledWith();
+        expect(cb).toHaveBeenCalledOnce();
+        expect(cb).toHaveBeenLastCalledWith('What', true);
 
-        actualCb.mockClear();
+        cb.mockClear();
 
         const problematicCb = vi.fn(() => {
           throw new Error('Some problem');
         });
 
-        const { cb: actualErrorCb2, promise: promise2 } = createAsyncCallback();
+        const { cb: errorCb, promise: promise2 } = createAsyncCallback();
 
-        actualTapable.tap('problem', problematicCb);
-        actualTapable.callAsync('Second', false, actualErrorCb2);
+        tapable.tap('problem', problematicCb);
+        tapable.callAsync('Second', false, errorCb);
 
         await promise2;
 
-        expect(actualErrorCb2).toHaveBeenCalledOnce();
-        expect(actualErrorCb2.mock.calls[0]).toStrictEqual([expect.any(Error)]);
-        expect(actualCb).toHaveBeenCalledOnce();
-        expect(actualCb).toHaveBeenLastCalledWith('Second', false);
+        expect(errorCb).toHaveBeenCalledOnce();
+        expect(errorCb.mock.calls[0]).toStrictEqual([expect.any(Error)]);
+        expect(cb).toHaveBeenCalledOnce();
+        expect(cb).toHaveBeenLastCalledWith('Second', false);
         expect(problematicCb).toHaveBeenCalledOnce();
         expect(problematicCb).toHaveBeenLastCalledWith('Second', false);
       });
-    });
-  });
 
-  describe('promise', () => {
-    scenarios.forEach((scenario) => {
-      it(`works for ${scenario.name}`, async () => {
-        const tapable = new scenario.hook(['name', 'isOk']);
-
-        const cb = vi.fn((name: string, isOk: boolean) => ({
-          name,
-          isOk,
-        }));
-
-        tapable.tap('callback', cb);
+      it('works for promise', async () => {
+        const { tapable, cb } = preparePositive();
         const result = await tapable.promise('malcolm', false);
 
         expect(cb).toHaveBeenCalledOnce();

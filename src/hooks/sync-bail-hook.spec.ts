@@ -13,9 +13,9 @@ describe('SyncBailHook', () => {
     expect(SyncBailHook.name).toBe(ActualSyncBailHook.name);
   });
 
-  describe('call', () => {
-    scenarios.forEach((scenario) => {
-      it(`works for ${scenario.name} without bailed`, () => {
+  scenarios.forEach((scenario) => {
+    describe(`works for ${scenario.name} without bailed`, () => {
+      const prepareNonBail = () => {
         const tapable = new scenario.hook(['name', 'age']);
 
         const cb1 = vi.fn();
@@ -25,6 +25,17 @@ describe('SyncBailHook', () => {
         tapable.tap('cb1', cb1);
         tapable.tap('cb2', cb2);
         tapable.tap('cb3', cb3);
+
+        return {
+          tapable,
+          cb1,
+          cb2,
+          cb3,
+        };
+      };
+
+      it(`call without bailed`, () => {
+        const { tapable, cb1, cb2, cb3 } = prepareNonBail();
 
         const result = tapable.call('malcolm', 5);
 
@@ -35,46 +46,8 @@ describe('SyncBailHook', () => {
         expect(cb3).toHaveBeenCalledOnce();
       });
 
-      it(`works for ${scenario.name} with bailed`, () => {
-        const tapable = new scenario.hook(['name', 'age']);
-
-        const cb1 = vi.fn();
-        const cb2 = vi.fn((name: string, age: number) => ({
-          name,
-          age,
-        }));
-        const cb3 = vi.fn();
-
-        tapable.tap('cb1', cb1);
-        tapable.tap('cb2', cb2);
-        tapable.tap('cb3', cb3);
-
-        const result = tapable.call('malcolm', 5);
-
-        expect(result).toStrictEqual({
-          name: 'malcolm',
-          age: 5,
-        });
-
-        expect(cb1).toHaveBeenCalledOnce();
-        expect(cb2).toHaveBeenCalledOnce();
-        expect(cb3).not.toHaveBeenCalled();
-      });
-    });
-  });
-
-  describe('callAsync', () => {
-    scenarios.forEach((scenario) => {
-      it(`works for ${scenario.name} without bailed`, async () => {
-        const tapable = new scenario.hook(['name', 'age'], 'myHook');
-
-        const cb1 = vi.fn();
-        const cb2 = vi.fn();
-        const cb3 = vi.fn();
-
-        tapable.tap('cb1', cb1);
-        tapable.tap('cb2', cb2);
-        tapable.tap('cb3', cb3);
+      it(`callAsync without bailed`, async () => {
+        const { tapable, cb1, cb2, cb3 } = prepareNonBail();
 
         const { cb: finalCb, promise } = createAsyncCallback();
 
@@ -89,8 +62,22 @@ describe('SyncBailHook', () => {
         expect(cb3).toHaveBeenCalledOnce();
       });
 
-      it(`works for ${scenario.name} when bailed`, async () => {
-        const tapable = new scenario.hook(['name', 'age'], 'myHook');
+      it(`promise without bailed`, async () => {
+        const { tapable, cb1, cb2, cb3 } = prepareNonBail();
+
+        const result = await tapable.promise('malcolm', 5);
+
+        expect(result).toBeUndefined();
+
+        expect(cb1).toHaveBeenCalledOnce();
+        expect(cb2).toHaveBeenCalledOnce();
+        expect(cb3).toHaveBeenCalledOnce();
+      });
+    });
+
+    describe(`works for ${scenario.name} with bailed`, () => {
+      const prepareBail = () => {
+        const tapable = new scenario.hook(['name', 'age'], 'bailedHook');
 
         const cb1 = vi.fn();
         const cb2 = vi.fn((name: string, age: number) => ({
@@ -103,6 +90,31 @@ describe('SyncBailHook', () => {
         tapable.tap('cb2', cb2);
         tapable.tap('cb3', cb3);
 
+        return {
+          cb1,
+          cb2,
+          cb3,
+          tapable,
+        };
+      };
+
+      it('call with bailed', () => {
+        const { cb1, cb2, cb3, tapable } = prepareBail();
+
+        const result = tapable.call('malcolm', 5);
+
+        expect(result).toStrictEqual({
+          name: 'malcolm',
+          age: 5,
+        });
+
+        expect(cb1).toHaveBeenCalledOnce();
+        expect(cb2).toHaveBeenCalledOnce();
+        expect(cb3).not.toHaveBeenCalled();
+      });
+
+      it('callAsync with bailed', async () => {
+        const { cb1, cb2, cb3, tapable } = prepareBail();
         const { cb: finalCb, promise } = createAsyncCallback();
 
         tapable.callAsync('malcolm', 5, finalCb);
@@ -119,7 +131,23 @@ describe('SyncBailHook', () => {
         expect(cb3).not.toHaveBeenCalled();
       });
 
-      it(`works for ${scenario.name} when error`, async () => {
+      it(`promise with bailed`, async () => {
+        const { cb1, cb2, cb3, tapable } = prepareBail();
+
+        const result = await tapable.promise('malcolm', 5);
+
+        expect(result).toStrictEqual({
+          name: 'malcolm',
+          age: 5,
+        });
+        expect(cb1).toHaveBeenCalledOnce();
+        expect(cb2).toHaveBeenCalledOnce();
+        expect(cb3).not.toHaveBeenCalled();
+      });
+    });
+
+    describe(`works for ${scenario.name} when error`, () => {
+      const prepareError = () => {
         const tapable = new scenario.hook(['name', 'age'], 'myHook');
 
         const cb1 = vi.fn();
@@ -132,6 +160,26 @@ describe('SyncBailHook', () => {
         tapable.tap('cb2', cb2);
         tapable.tap('cb3', cb3);
 
+        return {
+          cb1,
+          cb2,
+          cb3,
+          tapable,
+        };
+      };
+
+      it(`call with error`, () => {
+        const { cb1, cb2, cb3, tapable } = prepareError();
+
+        expect(() => tapable.call('malcolm', 5)).toThrowError('error in cb');
+
+        expect(cb1).toHaveBeenCalledOnce();
+        expect(cb2).toHaveBeenCalledOnce();
+        expect(cb3).not.toHaveBeenCalled();
+      });
+
+      it('callAsync with error', async () => {
+        const { cb1, cb2, cb3, tapable } = prepareError();
         const { cb: finalCb, promise } = createAsyncCallback();
 
         tapable.callAsync('malcolm', 5, finalCb);
@@ -144,68 +192,9 @@ describe('SyncBailHook', () => {
         expect(cb2).toHaveBeenCalledOnce();
         expect(cb3).not.toHaveBeenCalled();
       });
-    });
-  });
 
-  describe('promise', () => {
-    scenarios.forEach((scenario) => {
-      it(`works for ${scenario.name} without bailed`, async () => {
-        const tapable = new scenario.hook(['name', 'age'], 'myHook');
-
-        const cb1 = vi.fn();
-        const cb2 = vi.fn();
-        const cb3 = vi.fn();
-
-        tapable.tap('cb1', cb1);
-        tapable.tap('cb2', cb2);
-        tapable.tap('cb3', cb3);
-
-        const result = await tapable.promise('malcolm', 5);
-
-        expect(result).toBeUndefined();
-
-        expect(cb1).toHaveBeenCalledOnce();
-        expect(cb2).toHaveBeenCalledOnce();
-        expect(cb3).toHaveBeenCalledOnce();
-      });
-
-      it(`works for ${scenario.name} when bailed`, async () => {
-        const tapable = new scenario.hook(['name', 'age'], 'myHook');
-
-        const cb1 = vi.fn();
-        const cb2 = vi.fn((name: string, age: number) => ({
-          name,
-          age,
-        }));
-        const cb3 = vi.fn();
-
-        tapable.tap('cb1', cb1);
-        tapable.tap('cb2', cb2);
-        tapable.tap('cb3', cb3);
-
-        const result = await tapable.promise('malcolm', 5);
-
-        expect(result).toStrictEqual({
-          name: 'malcolm',
-          age: 5,
-        });
-        expect(cb1).toHaveBeenCalledOnce();
-        expect(cb2).toHaveBeenCalledOnce();
-        expect(cb3).not.toHaveBeenCalled();
-      });
-
-      it(`works for ${scenario.name} when error`, async () => {
-        const tapable = new scenario.hook(['name', 'age'], 'myHook');
-
-        const cb1 = vi.fn();
-        const cb2 = vi.fn(() => {
-          throw new Error('error in cb');
-        });
-        const cb3 = vi.fn();
-
-        tapable.tap('cb1', cb1);
-        tapable.tap('cb2', cb2);
-        tapable.tap('cb3', cb3);
+      it(`promise with error`, async () => {
+        const { cb1, cb2, cb3, tapable } = prepareError();
 
         await expect(tapable.promise('malcolm', 5)).rejects.toThrow('error in cb');
 
