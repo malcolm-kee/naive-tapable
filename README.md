@@ -18,7 +18,10 @@ The goals of this repo are:
 - [x] AsyncParallelBailHook
 - [x] AsyncSeriesHook
 - [x] AsyncSeriesBailHook
-- [ ] AsyncSeriesWaterfallHook
+- [x] AsyncSeriesWaterfallHook
+- [ ] AsyncSeriesLoopHook
+- [ ] HookMap
+- [ ] MultiHook
 
 ## Principles
 
