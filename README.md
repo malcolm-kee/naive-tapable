@@ -8,22 +8,7 @@ The goals of this repo are:
 - serves as an entry point to understand `tapable`.
 - to deepen my learning of `tapable`.
 
-## Progress
-
-- [x] SyncHook
-- [x] SyncBailHook
-- [x] SyncWaterfallHook
-- [x] SyncLoopHook
-- [x] AsyncParallelHook
-- [x] AsyncParallelBailHook
-- [x] AsyncSeriesHook
-- [x] AsyncSeriesBailHook
-- [x] AsyncSeriesWaterfallHook
-- [x] AsyncSeriesLoopHook
-- [ ] HookMap
-- [ ] MultiHook
-
-## Principles
+## Implementation Guidelines
 
 - Minimal abstraction, so it is easy to understand what each `tapable` class meant for.
 - Disregard any performance implication (that's why it's naive).
