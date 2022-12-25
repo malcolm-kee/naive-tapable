@@ -7,7 +7,7 @@
     "dev": "tsc --watch",
     "build": "tsc",
     "test": "vitest",
-    "test:ci": "vitest run --coverage"
+    "test:ci": "vitest run --coverage --allowOnly=false"
   },
   "keywords": [],
   "author": "",
