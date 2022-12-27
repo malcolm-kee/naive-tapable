@@ -1,32 +1,78 @@
 export type Callback = (...args: any) => any;
 
+export type Tap = {
+  name: string;
+  fn: Callback;
+  type: string;
+};
+
+export interface InterceptOptions {
+  call: (...args: any[]) => void;
+  tap: (...args: any[]) => void;
+  register: (tap: Tap) => Tap;
+  loop: (...args: any[]) => void;
+}
+
 export class SyncLoopHook {
-  private readonly taps: Array<{
-    pluginName: string;
-    fn: Callback;
-  }> = [];
+  readonly #taps: Array<Tap> = [];
+  readonly #interceptors: Array<Partial<InterceptOptions>> = [];
 
   constructor(private readonly params: string[], public readonly name?: string) {}
 
   tap(pluginName: string, fn: Callback) {
-    this.taps.push({
-      pluginName,
+    let tap: Tap = {
+      name: pluginName,
       fn,
-    });
+      type: 'sync',
+    };
+
+    for (const interceptor of this.#interceptors) {
+      if (interceptor.register) {
+        tap = interceptor.register(tap);
+      }
+    }
+
+    this.#taps.push(tap);
   }
 
-  call(...providedParams: any[]): void {
+  loop(providedParams: any[]) {
+    for (const interceptor of this.#interceptors) {
+      if (interceptor.loop) {
+        interceptor.loop(...providedParams);
+      }
+    }
+
     let index = 0;
 
-    while (index < this.taps.length) {
-      const tap = this.taps[index];
+    while (index < this.#taps.length) {
+      const tap = this.#taps[index];
+
+      for (const interceptor of this.#interceptors) {
+        if (interceptor.tap) {
+          interceptor.tap(tap);
+        }
+      }
+
       const result = tap.fn(...providedParams);
 
       if (typeof result !== 'undefined') {
-        index = 0;
+        this.loop(providedParams);
+        break;
       } else {
         index++;
       }
+    }
+  }
+
+  call(...providedParams: any[]): void {
+    for (const interceptor of this.#interceptors) {
+      if (interceptor.call) {
+        interceptor.call(...providedParams);
+      }
+    }
+
+    if (this.#taps.length) {
+      this.loop(providedParams);
     }
   }
 
@@ -46,5 +92,9 @@ export class SyncLoopHook {
       this.call(...providedParams);
       fulfill();
     });
+  }
+
+  intercept(options: Partial<InterceptOptions>) {
+    this.#interceptors.push(options);
   }
 }

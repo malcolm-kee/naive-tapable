@@ -598,7 +598,6 @@ describe('SyncWaterfallHook intercept', () => {
         expect(interceptor.call).not.toHaveBeenCalled();
         expect(interceptor.tap).not.toHaveBeenCalled();
         expect(interceptor.loop).not.toHaveBeenCalled();
-        expect(interceptor.loop).not.toHaveBeenCalled();
       });
 
       it('allows interceptor.register to overwrite implementation', () => {
