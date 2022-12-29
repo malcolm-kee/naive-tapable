@@ -1,23 +1,25 @@
 import { AsyncSeriesBailHook as ActualHook } from 'tapable';
 import { describe, expect, it, vi } from 'vitest';
-import { AsyncSeriesBailHook } from './async-series-bail-hook';
+import { AsyncSeriesBailHook, InterceptOptions } from './async-series-bail-hook';
 import { createAsyncCallback } from './utils/test-helper';
+
+const scenarios = [
+  {
+    name: 'tapable',
+    hook: ActualHook as any as typeof AsyncSeriesBailHook,
+  },
+  {
+    name: 'our',
+    hook: AsyncSeriesBailHook,
+  },
+];
 
 describe('AsyncSeriesBailHook', () => {
   it('has same name', () => {
     expect(AsyncSeriesBailHook.name).toBe(ActualHook.name);
   });
 
-  [
-    {
-      name: 'tapable',
-      hook: ActualHook as any as typeof AsyncSeriesBailHook,
-    },
-    {
-      name: 'our',
-      hook: AsyncSeriesBailHook,
-    },
-  ].forEach((scenario) => {
+  scenarios.forEach((scenario) => {
     describe(`${scenario.name} run without bail`, () => {
       const prepareWithoutBail = () => {
         const tapable = new scenario.hook(['name', 'data'], 'myHook');
@@ -557,6 +559,123 @@ describe('AsyncSeriesBailHook', () => {
         expect(asyncCb).toHaveBeenCalledOnce();
         expect(promiseCb).not.toHaveBeenCalled();
       });
+    });
+  });
+});
+
+scenarios.forEach((scenario) => {
+  describe(`AsyncSeriesBailHook interception works for ${scenario.name}`, () => {
+    const prepareWithoutBail = ({
+      call = vi.fn(),
+      tap = vi.fn(),
+      register = vi.fn((x) => x),
+      loop = vi.fn(),
+    }: Partial<InterceptOptions> = {}) => {
+      const tapable = new scenario.hook(['name', 'data'], 'myHook');
+
+      const interceptor = {
+        call,
+        tap,
+        register,
+        loop,
+      };
+
+      tapable.intercept(interceptor);
+
+      const cb = vi.fn((_: unknown, data: Array<string>) => {
+        data.push('cb');
+      });
+      const promiseCb = vi.fn(
+        (_: unknown, data: Array<string>) =>
+          new Promise<void>((fulfill) =>
+            setTimeout(() => {
+              data.push('promise');
+              fulfill();
+            }, 100)
+          )
+      );
+      const asyncCb = vi.fn((_: unknown, data: Array<string>, cb: () => void) =>
+        setTimeout(() => {
+          data.push('async');
+          cb();
+        }, 50)
+      );
+
+      tapable.tap('cb', cb);
+      tapable.tapPromise('promiseCb', promiseCb);
+      tapable.tapAsync('asyncCb', asyncCb);
+
+      return {
+        tapable,
+        interceptor,
+        cb,
+        promiseCb,
+        asyncCb,
+      };
+    };
+
+    it('works for intercept call with promise', async () => {
+      const { tapable, interceptor, cb, asyncCb, promiseCb } = prepareWithoutBail();
+      const data: string[] = [];
+
+      const result = await tapable.promise('malcolm', data);
+
+      expect(interceptor.call).toHaveBeenCalledTimes(1);
+      expect(interceptor.call).toHaveBeenCalledWith('malcolm', data);
+      expect(result).toBeUndefined();
+      expect(data).toMatchInlineSnapshot(`
+        [
+          "cb",
+          "promise",
+          "async",
+        ]
+      `);
+      expect(cb).toHaveBeenCalledOnce();
+      expect(promiseCb).toHaveBeenCalledOnce();
+      expect(asyncCb).toHaveBeenCalledOnce();
+    });
+
+    it('works for intercept tap', async () => {
+      const { tapable, interceptor } = prepareWithoutBail();
+      const data: string[] = [];
+
+      await tapable.promise('malcolm', data);
+
+      expect(interceptor.tap).toHaveBeenCalledTimes(3);
+    });
+
+    it('works for intercept register', async () => {
+      const { interceptor } = prepareWithoutBail();
+
+      expect(interceptor.register).toHaveBeenCalledTimes(3);
+    });
+
+    it('allows interceptor.register to overwrite implementation', async () => {
+      const { tapable, interceptor, cb, promiseCb, asyncCb } = prepareWithoutBail({
+        register: vi.fn((tap) => {
+          return {
+            ...tap,
+            ...(tap.name === 'promiseCb'
+              ? {
+                  fn: () => Promise.resolve(15),
+                }
+              : {}),
+          };
+        }),
+      });
+
+      const data: string[] = [];
+
+      const result = await tapable.promise('malcolm', data);
+
+      expect(result).toBe(15);
+      expect(cb).toHaveBeenCalledOnce();
+      expect(promiseCb).not.toHaveBeenCalled();
+      expect(asyncCb).not.toHaveBeenCalled();
+      expect(interceptor.call).toHaveBeenCalledOnce();
+      expect(interceptor.tap).toHaveBeenCalledTimes(2);
+      expect(interceptor.register).toHaveBeenCalledTimes(3);
+      expect(interceptor.loop).not.toHaveBeenCalled();
     });
   });
 });
