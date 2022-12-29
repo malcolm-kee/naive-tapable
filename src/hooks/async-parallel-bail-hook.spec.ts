@@ -1,23 +1,25 @@
 import { AsyncParallelBailHook as ActualHook } from 'tapable';
 import { describe, expect, it, vi } from 'vitest';
-import { AsyncParallelBailHook } from './async-parallel-bail-hook';
+import { AsyncParallelBailHook, InterceptOptions } from './async-parallel-bail-hook';
 import { createAsyncCallback } from './utils/test-helper';
+
+const scenarios = [
+  {
+    name: 'tapable',
+    hook: ActualHook as any as typeof AsyncParallelBailHook,
+  },
+  {
+    name: 'our',
+    hook: AsyncParallelBailHook,
+  },
+];
 
 describe('AsyncParallelBailHook', () => {
   it('has the same name', () => {
     expect(AsyncParallelBailHook.name).toBe(ActualHook.name);
   });
 
-  [
-    {
-      name: 'tapable',
-      hook: ActualHook as any as typeof AsyncParallelBailHook,
-    },
-    {
-      name: 'our',
-      hook: AsyncParallelBailHook,
-    },
-  ].forEach((scenario) => {
+  scenarios.forEach((scenario) => {
     describe(`${scenario.name} works without bail`, () => {
       const prepareWithoutBail = () => {
         const tapable = new scenario.hook(['name', 'age']);
@@ -409,6 +411,171 @@ describe('AsyncParallelBailHook', () => {
         expect(promiseCb).toHaveBeenCalledOnce();
         expect(asyncCb).toHaveBeenCalledOnce();
       });
+    });
+  });
+});
+
+scenarios.forEach((scenario) => {
+  describe(`AsyncParallelBailHook interception for ${scenario.name} without bail`, () => {
+    const prepareWithoutBail = ({
+      call = vi.fn(),
+      tap = vi.fn(),
+      register = vi.fn((x) => x),
+      loop = vi.fn(),
+    }: Partial<InterceptOptions> = {}) => {
+      const tapable = new scenario.hook(['name', 'age']);
+
+      const interceptor = {
+        call,
+        tap,
+        register,
+        loop,
+      };
+
+      tapable.intercept(interceptor);
+
+      const cb1 = vi.fn();
+      const promiseCb = vi.fn(
+        () => new Promise<number | undefined>((fulfill) => setTimeout(fulfill, 50))
+      );
+      const asyncCb = vi.fn((_: string, __: number, cb: () => void) => setTimeout(() => cb(), 50));
+
+      tapable.tap('cb1', cb1);
+      tapable.tapPromise('promiseCb', promiseCb);
+      tapable.tapAsync('asyncCb', asyncCb);
+
+      return {
+        tapable,
+        interceptor,
+        cb1,
+        promiseCb,
+        asyncCb,
+      };
+    };
+
+    it('works for intercept call', async () => {
+      const { tapable, interceptor, cb1, promiseCb, asyncCb } = prepareWithoutBail();
+
+      await tapable.promise('malcolm', 5);
+
+      expect(interceptor.call).toHaveBeenCalledOnce();
+      expect(interceptor.call).toHaveBeenCalledWith('malcolm', 5);
+      expect(cb1).toHaveBeenCalledOnce();
+      expect(cb1).toHaveBeenCalledWith('malcolm', 5);
+      expect(promiseCb).toHaveBeenCalledOnce();
+      expect(promiseCb).toHaveBeenCalledWith('malcolm', 5);
+      expect(asyncCb).toHaveBeenCalledOnce();
+      expect(asyncCb).toHaveBeenCalledWith('malcolm', 5, expect.any(Function));
+    });
+
+    it('works for intercept call with callAsync', async () => {
+      const { tapable, interceptor, cb1, promiseCb, asyncCb } = prepareWithoutBail();
+
+      const { cb: finalCb, promise } = createAsyncCallback();
+
+      tapable.callAsync('malcolm', 5, finalCb);
+
+      await promise;
+
+      expect(interceptor.call).toHaveBeenCalledOnce();
+      expect(interceptor.call).toHaveBeenCalledWith('malcolm', 5);
+      expect(cb1).toHaveBeenCalledOnce();
+      expect(cb1).toHaveBeenCalledWith('malcolm', 5);
+      expect(promiseCb).toHaveBeenCalledOnce();
+      expect(promiseCb).toHaveBeenCalledWith('malcolm', 5);
+      expect(asyncCb).toHaveBeenCalledOnce();
+      expect(asyncCb).toHaveBeenCalledWith('malcolm', 5, expect.any(Function));
+    });
+
+    it('works for intercept tap', async () => {
+      const { tapable, interceptor } = prepareWithoutBail();
+
+      await tapable.promise('malcolm', 5);
+
+      expect(interceptor.tap).toHaveBeenCalledTimes(3);
+    });
+
+    it('works for intercept register', () => {
+      const { interceptor } = prepareWithoutBail();
+
+      expect(interceptor.register).toHaveBeenCalledTimes(3);
+    });
+
+    it('works for intercept register change implementation', async () => {
+      const { tapable, interceptor, cb1, promiseCb } = prepareWithoutBail({
+        register(tap) {
+          return {
+            ...tap,
+            ...(tap.name === 'promiseCb'
+              ? {
+                  fn: (...params: any[]) => tap.fn(params),
+                }
+              : {}),
+          };
+        },
+      });
+
+      await tapable.promise('malcolm', 5);
+
+      expect(cb1).toHaveBeenCalledOnce();
+      expect(cb1).toHaveBeenCalledWith('malcolm', 5);
+      expect(promiseCb).toHaveBeenCalledOnce();
+      expect(promiseCb).toHaveBeenCalledWith(['malcolm', 5]);
+
+      expect(interceptor.loop).not.toHaveBeenCalled();
+    });
+  });
+
+  describe(`AsyncParallelBailHook interception for ${scenario.name} with bail`, () => {
+    const prepareWithBail = ({
+      call = vi.fn(),
+      tap = vi.fn(),
+      register = vi.fn((x) => x),
+      loop = vi.fn(),
+    }: Partial<InterceptOptions> = {}) => {
+      const tapable = new scenario.hook(['name', 'age'], 'myHook');
+
+      const interceptor: InterceptOptions = {
+        call,
+        tap,
+        register,
+        loop,
+      };
+
+      tapable.intercept(interceptor);
+
+      const cb1 = vi.fn();
+      const promiseCb = vi.fn(
+        () => new Promise<number | undefined>((fulfill) => setTimeout(() => fulfill(100), 50))
+      );
+      const asyncCb = vi.fn((_: string, __: number, cb: () => void) => setTimeout(() => cb(), 50));
+
+      tapable.tap('cb1', cb1);
+      tapable.tapPromise('promiseCb', promiseCb);
+      tapable.tapAsync('asyncCb', asyncCb);
+
+      return {
+        tapable,
+        interceptor,
+        cb1,
+        promiseCb,
+        asyncCb,
+      };
+    };
+
+    it('works for intercept call', async () => {
+      const { tapable, interceptor, cb1, promiseCb, asyncCb } = prepareWithBail();
+
+      const result = await tapable.promise('malcolm', 5);
+
+      expect(result).toBe(100);
+      expect(interceptor.call).toHaveBeenCalledOnce();
+      expect(cb1).toHaveBeenCalledOnce();
+      expect(cb1).toHaveBeenCalledWith('malcolm', 5);
+      expect(promiseCb).toHaveBeenCalledOnce();
+      expect(promiseCb).toHaveBeenCalledWith('malcolm', 5);
+      expect(asyncCb).toHaveBeenCalledOnce();
+      expect(asyncCb).toHaveBeenCalledWith('malcolm', 5, expect.any(Function));
     });
   });
 });

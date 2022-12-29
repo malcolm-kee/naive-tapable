@@ -281,7 +281,7 @@ scenarios.forEach((scenario) => {
       };
     };
 
-    it('works for intercept promise', async () => {
+    it('works for intercept call with promise', async () => {
       const { tapable, interceptor, cb1, promiseCb, asyncCb } = prepareNoIssue();
 
       await tapable.promise('malcolm', 3);
@@ -296,7 +296,7 @@ scenarios.forEach((scenario) => {
       expect(interceptor.loop).not.toHaveBeenCalled();
     });
 
-    it('works for intercept callAsync', async () => {
+    it('works for intercept call with callAsync', async () => {
       const { tapable, interceptor, cb1, promiseCb, asyncCb } = prepareNoIssue();
 
       const { cb: finalCb, promise } = createAsyncCallback();
