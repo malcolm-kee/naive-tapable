@@ -1,47 +1,73 @@
+export type Tap = {
+  name: string;
+  fn: Function;
+  type: 'sync' | 'async' | 'promise';
+};
+
+export interface InterceptOptions {
+  call: (...args: any[]) => void;
+  tap: (...args: any[]) => void;
+  register: (tap: Tap) => Tap;
+  loop: (...args: any[]) => void;
+}
+
 export class AsyncSeriesWaterfallHook {
-  private readonly taps: Array<{
-    pluginName: string;
-    fn: Function;
-    type: 'sync' | 'async' | 'promise';
-  }> = [];
+  readonly #taps: Array<Tap> = [];
+  readonly #interceptors: Array<Partial<InterceptOptions>> = [];
 
   constructor(private readonly params: string[], public readonly name?: string) {}
 
   tap(pluginName: string, fn: Function) {
-    this.taps.push({
-      pluginName,
-      type: 'sync',
-      fn,
-    });
+    this.#addTap('sync', pluginName, fn);
   }
 
   tapPromise(pluginName: string, fn: Function) {
-    this.taps.push({
-      pluginName,
-      type: 'promise',
-      fn,
-    });
+    this.#addTap('promise', pluginName, fn);
   }
 
   tapAsync(pluginName: string, fn: Function) {
-    this.taps.push({
-      pluginName,
-      type: 'async',
+    this.#addTap('async', pluginName, fn);
+  }
+
+  #addTap(type: 'sync' | 'promise' | 'async', name: string, fn: Function) {
+    let tap: Tap = {
+      name,
+      type,
       fn,
-    });
+    };
+
+    for (const interceptor of this.#interceptors) {
+      if (interceptor.register) {
+        tap = interceptor.register(tap);
+      }
+    }
+
+    this.#taps.push(tap);
   }
 
   callAsync(...params: any[]): void {
     const finalCb = params.pop();
 
+    for (const interceptor of this.#interceptors) {
+      if (interceptor.call) {
+        interceptor.call(...params);
+      }
+    }
+
     let index = 0;
     let prevResult = params.shift();
 
     const next = () => {
-      const tap = this.taps[index];
+      const tap = this.#taps[index];
 
       if (!tap) {
         return finalCb(null, prevResult);
+      }
+
+      for (const interceptor of this.#interceptors) {
+        if (interceptor.tap) {
+          interceptor.tap(tap);
+        }
       }
 
       switch (tap.type) {
@@ -93,5 +119,9 @@ export class AsyncSeriesWaterfallHook {
         err ? reject(err) : fulfill(result)
       );
     });
+  }
+
+  intercept(options: Partial<InterceptOptions>) {
+    this.#interceptors.push(options);
   }
 }

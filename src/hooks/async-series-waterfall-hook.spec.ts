@@ -1,23 +1,25 @@
 import { AsyncSeriesWaterfallHook as ActualHook } from 'tapable';
 import { describe, expect, it, vi } from 'vitest';
-import { AsyncSeriesWaterfallHook } from './async-series-waterfall-hook';
+import { AsyncSeriesWaterfallHook, InterceptOptions } from './async-series-waterfall-hook';
 import { createAsyncCallback } from './utils/test-helper';
+
+const scenarios = [
+  {
+    name: 'tapable',
+    hook: ActualHook as any as typeof AsyncSeriesWaterfallHook,
+  },
+  {
+    name: 'our',
+    hook: AsyncSeriesWaterfallHook,
+  },
+];
 
 describe('AsyncSeriesWaterfallHook', () => {
   it('has same name', () => {
     expect(AsyncSeriesWaterfallHook.name).toBe(ActualHook.name);
   });
 
-  [
-    {
-      name: 'tapable',
-      hook: ActualHook as any as typeof AsyncSeriesWaterfallHook,
-    },
-    {
-      name: 'our',
-      hook: AsyncSeriesWaterfallHook,
-    },
-  ].forEach((scenario) => {
+  scenarios.forEach((scenario) => {
     describe(`${scenario.name} run with always return value`, async () => {
       const prepareNoIssue = () => {
         const tapable = new scenario.hook(['name', 'data']);
@@ -587,6 +589,129 @@ describe('AsyncSeriesWaterfallHook', () => {
         expect(asyncCb).toHaveBeenCalledOnce();
         expect(promiseCb).not.toHaveBeenCalled();
       });
+    });
+  });
+});
+
+scenarios.forEach((scenario) => {
+  describe(`AsyncSeriesWaterfallHook intercept for ${scenario.name}`, () => {
+    const prepareNoIssue = ({
+      call = vi.fn(),
+      tap = vi.fn(),
+      register = vi.fn((x) => x),
+      loop = vi.fn(),
+    }: Partial<InterceptOptions> = {}) => {
+      const interceptor = {
+        call,
+        tap,
+        register,
+        loop,
+      };
+
+      const tapable = new scenario.hook(['name', 'data']);
+
+      tapable.intercept(interceptor);
+
+      const cb = vi.fn((name: string, data: string[]) => {
+        data.push('cbCall');
+
+        return `${name} + cb`;
+      });
+      const promiseCb = vi.fn(
+        (name: string, data: string[]) =>
+          new Promise<string>((fulfill) =>
+            setTimeout(() => {
+              data.push('promiseCall');
+              fulfill(`${name} + promise`);
+            }, 100)
+          )
+      );
+      const asyncCb = vi.fn(
+        (name: string, data: string[], cb: (error: Error | null, result?: string) => void) => {
+          setTimeout(() => {
+            data.push('asyncCall');
+            cb(null, `${name} + async`);
+          }, 50);
+        }
+      );
+
+      tapable.tap('cb', cb);
+      tapable.tapPromise('promiseCb', promiseCb);
+      tapable.tapAsync('asyncCb', asyncCb);
+
+      return {
+        tapable,
+        interceptor,
+        cb,
+        promiseCb,
+        asyncCb,
+      };
+    };
+
+    it(`works for intercept call with promise`, async () => {
+      const { tapable, interceptor, cb, promiseCb, asyncCb } = prepareNoIssue();
+
+      const data: string[] = [];
+
+      const result = await tapable.promise('malcolm', data);
+
+      expect(interceptor.call).toHaveBeenCalledOnce();
+      expect(interceptor.call).toHaveBeenCalledWith('malcolm', data);
+      expect(interceptor.loop).not.toHaveBeenCalled();
+
+      expect(result).toBe('malcolm + cb + promise + async');
+      expect(data).toMatchInlineSnapshot(`
+        [
+          "cbCall",
+          "promiseCall",
+          "asyncCall",
+        ]
+      `);
+      expect(cb).toHaveBeenCalledOnce();
+      expect(promiseCb).toHaveBeenCalledOnce();
+      expect(asyncCb).toHaveBeenCalledOnce();
+    });
+
+    it(`works for intercept tap`, async () => {
+      const { tapable, interceptor } = prepareNoIssue();
+
+      const data: string[] = [];
+
+      await tapable.promise('malcolm', data);
+
+      expect(interceptor.tap).toHaveBeenCalledTimes(3);
+      expect(interceptor.loop).not.toHaveBeenCalled();
+    });
+
+    it('works for intercept register', async () => {
+      const { interceptor } = prepareNoIssue();
+      expect(interceptor.register).toHaveBeenCalledTimes(3);
+    });
+
+    it('allows interceptor.register to overwrite implementation', async () => {
+      const { tapable, interceptor, cb, promiseCb, asyncCb } = prepareNoIssue({
+        register(tap) {
+          return {
+            ...tap,
+            ...(tap.name === 'promiseCb'
+              ? {
+                  fn: (name: string) => Promise.resolve(`${name} + overwritten promise`),
+                }
+              : {}),
+          };
+        },
+      });
+
+      const data: string[] = [];
+
+      const result = await tapable.promise('malcolm', data);
+
+      expect(result).toBe('malcolm + cb + overwritten promise + async');
+
+      expect(cb).toHaveBeenCalledOnce();
+      expect(promiseCb).not.toHaveBeenCalled();
+      expect(asyncCb).toHaveBeenCalledOnce();
+      expect(interceptor.loop).not.toHaveBeenCalled();
     });
   });
 });
