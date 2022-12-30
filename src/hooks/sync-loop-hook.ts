@@ -35,7 +35,7 @@ export class SyncLoopHook {
     this.#taps.push(tap);
   }
 
-  loop(providedParams: any[]) {
+  #loop(providedParams: any[]) {
     for (const interceptor of this.#interceptors) {
       if (interceptor.loop) {
         interceptor.loop(...providedParams);
@@ -56,7 +56,7 @@ export class SyncLoopHook {
       const result = tap.fn(...providedParams);
 
       if (typeof result !== 'undefined') {
-        this.loop(providedParams);
+        this.#loop(providedParams);
         break;
       } else {
         index++;
@@ -72,7 +72,7 @@ export class SyncLoopHook {
     }
 
     if (this.#taps.length) {
-      this.loop(providedParams);
+      this.#loop(providedParams);
     }
   }
 
