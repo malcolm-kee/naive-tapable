@@ -1,6 +1,6 @@
 import { SyncBailHook as ActualSyncBailHook } from 'tapable';
 import { describe, expect, it, vi } from 'vitest';
-import { SyncBailHook } from './sync-bail-hook';
+import { SyncBailHook, InterceptOptions } from './sync-bail-hook';
 import { createAsyncCallback } from './utils/test-helper';
 
 describe('SyncBailHook', () => {
@@ -204,4 +204,158 @@ describe('SyncBailHook', () => {
       });
     });
   });
+});
+
+describe('SyncBailHook interception', () => {
+  const scenarios = [
+    { name: 'tapable', hook: ActualSyncBailHook as any as typeof SyncBailHook },
+    { name: 'our', hook: SyncBailHook },
+  ];
+
+  scenarios.forEach((scenario) => {
+    describe(`interception works for ${scenario.name}`, () => {
+      const prepare = (
+        {
+          call = vi.fn(),
+          tap = vi.fn(),
+          register = vi.fn((x) => x),
+          loop = vi.fn(),
+        }: Partial<InterceptOptions> = {},
+        firstCb = vi.fn(),
+        secondCb = vi.fn()
+      ) => {
+        const tapable = new scenario.hook(['param1', 'param2'], 'myTapable');
+
+        const interceptor = {
+          call,
+          tap,
+          register,
+          loop,
+        };
+
+        tapable.intercept(interceptor);
+
+        tapable.tap('first', firstCb);
+        tapable.tap('second', secondCb);
+
+        return {
+          tapable,
+          firstCb,
+          secondCb,
+          interceptor,
+        };
+      };
+
+      it('works for intercept call', () => {
+        const { tapable, interceptor } = prepare();
+
+        tapable.call('first', 2);
+
+        expect(interceptor.call).toHaveBeenCalledOnce();
+        expect(interceptor.call).toHaveBeenCalledWith('first', 2);
+        expect(interceptor.loop).not.toHaveBeenCalled();
+      });
+
+      it('works for intercept call with callAsync', async () => {
+        const { tapable, interceptor } = prepare();
+
+        const { cb: finalCb, promise } = createAsyncCallback();
+        tapable.callAsync('first', 2, finalCb);
+
+        await promise;
+
+        expect(interceptor.call).toHaveBeenCalledOnce();
+        expect(interceptor.call).toHaveBeenCalledWith('first', 2);
+        expect(interceptor.loop).not.toHaveBeenCalled();
+      });
+
+      it('works for intercept call with promise', async () => {
+        const { tapable, interceptor } = prepare();
+
+        await tapable.promise('first', 2);
+
+        expect(interceptor.call).toHaveBeenCalledOnce();
+        expect(interceptor.call).toHaveBeenCalledWith('first', 2);
+        expect(interceptor.loop).not.toHaveBeenCalled();
+      });
+
+      it('works for intercept tap', () => {
+        const { tapable, interceptor, firstCb, secondCb } = prepare(
+          {},
+          vi.fn(() => `bail result`)
+        );
+
+        tapable.call('first', 2);
+
+        expect(interceptor.tap).toHaveBeenCalledOnce();
+        expect(interceptor.tap).toHaveBeenNthCalledWith(1, {
+          type: 'sync',
+          fn: firstCb,
+          name: 'first',
+        });
+        expect(interceptor.loop).not.toHaveBeenCalled();
+        expect(firstCb).toHaveBeenCalledOnce();
+        expect(secondCb).not.toHaveBeenCalled();
+      });
+
+      it('works for intercept register', () => {
+        const { interceptor } = prepare();
+
+        expect(interceptor.register).toHaveBeenCalledTimes(2);
+        expect(interceptor.call).not.toHaveBeenCalled();
+        expect(interceptor.tap).not.toHaveBeenCalled();
+        expect(interceptor.loop).not.toHaveBeenCalled();
+        expect(interceptor.loop).not.toHaveBeenCalled();
+      });
+
+      it('allows interceptor.register to overwrite implementation', () => {
+        const { tapable, firstCb, secondCb, interceptor } = prepare({
+          register: vi.fn((tapInfo) => {
+            return {
+              ...tapInfo,
+              fn:
+                tapInfo.name === 'first'
+                  ? (...args: any[]) => tapInfo.fn(args) || 'bailed'
+                  : tapInfo.fn,
+            };
+          }),
+        });
+
+        tapable.call('Malcolm', 32);
+
+        expect(firstCb).toHaveBeenCalledOnce();
+        expect(firstCb).toHaveBeenCalledWith(['Malcolm', 32]);
+
+        expect(secondCb).not.toHaveBeenCalled();
+
+        expect(interceptor.loop).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  // it('test base case', () => {
+  //   const tapable = new ActualSyncBailHook<[string, number], unknown>(['name', 'age']);
+
+  //   const interceptor = {
+  //     call: vi.fn(),
+  //     tap: vi.fn(),
+  //     register: vi.fn((x) => x),
+  //     loop: vi.fn(),
+  //   };
+
+  //   tapable.intercept(interceptor);
+
+  //   const firstCb = vi.fn();
+  //   const secondCb = vi.fn();
+
+  //   tapable.tap('first', firstCb);
+  //   tapable.tap('second', secondCb);
+
+  //   tapable.call('name', 24);
+
+  //   console.log('call', interceptor.call.mock.calls);
+  //   console.log('tap', interceptor.tap.mock.calls);
+  //   console.log('register', interceptor.register.mock.calls);
+  //   console.log('loop', interceptor.loop.mock.calls);
+  // });
 });

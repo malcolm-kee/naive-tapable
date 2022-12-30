@@ -1,49 +1,74 @@
+export type Tap = {
+  name: string;
+  fn: Function;
+  type: 'sync' | 'async' | 'promise';
+};
+
+export interface InterceptOptions {
+  call: (...args: any[]) => void;
+  tap: (...args: any[]) => void;
+  register: (tap: Tap) => Tap;
+  loop: (...args: any[]) => void;
+}
+
 export class AsyncParallelHook {
-  private readonly taps: Array<{
-    pluginName: string;
-    fn: Function;
-    type: 'sync' | 'async' | 'promise';
-  }> = [];
+  readonly #taps: Array<Tap> = [];
+  readonly #interceptors: Array<Partial<InterceptOptions>> = [];
 
   constructor(private readonly params: string[], public readonly name?: string) {}
 
   tap(pluginName: string, fn: Function) {
-    this.taps.push({
-      pluginName,
-      type: 'sync',
-      fn,
-    });
+    this.#addTap('sync', pluginName, fn);
   }
 
   tapPromise(pluginName: string, fn: Function) {
-    this.taps.push({
-      pluginName,
-      type: 'promise',
-      fn,
-    });
+    this.#addTap('promise', pluginName, fn);
   }
 
   tapAsync(pluginName: string, fn: Function) {
-    this.taps.push({
-      pluginName,
-      type: 'async',
+    this.#addTap('async', pluginName, fn);
+  }
+
+  #addTap(type: 'sync' | 'promise' | 'async', name: string, fn: Function) {
+    let tap: Tap = {
+      name,
+      type,
       fn,
-    });
+    };
+
+    for (const interceptor of this.#interceptors) {
+      if (interceptor.register) {
+        tap = interceptor.register(tap);
+      }
+    }
+
+    this.#taps.push(tap);
   }
 
   callAsync(...params: any[]): void {
     const finalCb = params.pop();
 
+    for (const interceptor of this.#interceptors) {
+      if (interceptor.call) {
+        interceptor.call(...params);
+      }
+    }
+
     let completedCount = 0;
 
-    loopTap: for (const tap of this.taps) {
+    loopTap: for (const tap of this.#taps) {
+      for (const interceptor of this.#interceptors) {
+        if (interceptor.tap) {
+          interceptor.tap(tap);
+        }
+      }
       switch (tap.type) {
         case 'sync': {
           try {
             tap.fn(...params);
             completedCount++;
 
-            if (completedCount === this.taps.length) {
+            if (completedCount === this.#taps.length) {
               finalCb();
             }
           } catch (err) {
@@ -57,7 +82,7 @@ export class AsyncParallelHook {
           tap.fn(...params).then(() => {
             completedCount++;
 
-            if (completedCount === this.taps.length) {
+            if (completedCount === this.#taps.length) {
               finalCb();
             }
           }, finalCb);
@@ -71,7 +96,7 @@ export class AsyncParallelHook {
             }
             completedCount++;
 
-            if (completedCount === this.taps.length) {
+            if (completedCount === this.#taps.length) {
               finalCb();
             }
           });
@@ -84,5 +109,9 @@ export class AsyncParallelHook {
     return new Promise((fulfill, reject) => {
       this.callAsync(...params, (err: Error | null) => (err ? reject(err) : fulfill()));
     });
+  }
+
+  intercept(options: Partial<InterceptOptions>) {
+    this.#interceptors.push(options);
   }
 }

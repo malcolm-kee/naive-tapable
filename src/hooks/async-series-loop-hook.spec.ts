@@ -1,27 +1,29 @@
 import { AsyncSeriesLoopHook as ActualHook } from 'tapable';
 import { describe, expect, it, vi } from 'vitest';
-import { AsyncSeriesLoopHook } from './async-series-loop-hook';
+import { AsyncSeriesLoopHook, InterceptOptions } from './async-series-loop-hook';
 import { createAsyncCallback } from './utils/test-helper';
+
+const scenarios = [
+  {
+    name: 'tapable',
+    hook: ActualHook as any as typeof AsyncSeriesLoopHook,
+  },
+  {
+    name: 'our',
+    hook: AsyncSeriesLoopHook,
+  },
+];
+
+interface Data {
+  total: number;
+}
 
 describe('AsyncSeriesLoopHook', () => {
   it('has the same name', () => {
     expect(AsyncSeriesLoopHook.name).toBe(ActualHook.name);
   });
 
-  [
-    {
-      name: 'tapable',
-      hook: ActualHook as any as typeof AsyncSeriesLoopHook,
-    },
-    {
-      name: 'our',
-      hook: AsyncSeriesLoopHook,
-    },
-  ].forEach((scenario) => {
-    interface Data {
-      total: number;
-    }
-
+  scenarios.forEach((scenario) => {
     describe(`${scenario.name} without looping`, () => {
       const prepareNoLooping = () => {
         const tapable = new scenario.hook(['data'], 'myHook');
@@ -97,7 +99,7 @@ describe('AsyncSeriesLoopHook', () => {
     });
 
     describe(`${scenario.name} with looping by cb`, () => {
-      const prepareNoLooping = () => {
+      const prepareLoopingByCb = () => {
         const tapable = new scenario.hook(['data'], 'myHook');
 
         const addOneCb = vi.fn((data: Data) => {
@@ -150,7 +152,7 @@ describe('AsyncSeriesLoopHook', () => {
       })();
 
       it(`callAsync with looping by cb`, async () => {
-        const { tapable, addOneCb, timesThreePromise, asyncSquareCb } = prepareNoLooping();
+        const { tapable, addOneCb, timesThreePromise, asyncSquareCb } = prepareLoopingByCb();
         const { cb: finalCb, promise } = createAsyncCallback();
 
         const data: Data = {
@@ -170,7 +172,7 @@ describe('AsyncSeriesLoopHook', () => {
       });
 
       it(`promise with looping by cb`, async () => {
-        const { tapable, addOneCb, timesThreePromise, asyncSquareCb } = prepareNoLooping();
+        const { tapable, addOneCb, timesThreePromise, asyncSquareCb } = prepareLoopingByCb();
 
         const data: Data = {
           total: 10,
@@ -187,7 +189,7 @@ describe('AsyncSeriesLoopHook', () => {
     });
 
     describe(`${scenario.name} with looping by promise`, () => {
-      const prepareNoLooping = () => {
+      const prepareLoopingByPromise = () => {
         const tapable = new scenario.hook(['data'], 'myHook');
 
         const addOneCb = vi.fn((data: Data) => {
@@ -236,7 +238,7 @@ describe('AsyncSeriesLoopHook', () => {
       })();
 
       it(`callAsync with looping by promise`, async () => {
-        const { tapable, addOneCb, timesThreePromise, asyncSquareCb } = prepareNoLooping();
+        const { tapable, addOneCb, timesThreePromise, asyncSquareCb } = prepareLoopingByPromise();
         const { cb: finalCb, promise } = createAsyncCallback();
 
         const data: Data = {
@@ -256,7 +258,7 @@ describe('AsyncSeriesLoopHook', () => {
       });
 
       it(`promise with looping by promise`, async () => {
-        const { tapable, addOneCb, timesThreePromise, asyncSquareCb } = prepareNoLooping();
+        const { tapable, addOneCb, timesThreePromise, asyncSquareCb } = prepareLoopingByPromise();
 
         const data: Data = {
           total: 10,
@@ -595,6 +597,161 @@ describe('AsyncSeriesLoopHook', () => {
         expect(asyncCb).toHaveBeenCalledOnce();
         expect(promiseCb).not.toHaveBeenCalled();
       });
+    });
+  });
+});
+
+scenarios.forEach((scenario) => {
+  describe(`AsyncSeriesLoopHook intercept for ${scenario.name}`, () => {
+    const prepareLoopingByPromise = ({
+      call = vi.fn(),
+      tap = vi.fn(),
+      register = vi.fn((x) => x),
+      loop = vi.fn(),
+    }: Partial<InterceptOptions> = {}) => {
+      const tapable = new scenario.hook(['data'], 'myHook');
+
+      const interceptor: InterceptOptions = {
+        call,
+        tap,
+        register,
+        loop,
+      };
+
+      tapable.intercept(interceptor);
+
+      const addOneCb = vi.fn((data: Data) => {
+        data.total = data.total + 1;
+      });
+
+      const timesThreePromise = vi.fn(
+        (data: Data) =>
+          new Promise<any>((fulfill) => {
+            setTimeout(() => {
+              data.total = data.total * 3;
+              fulfill(data.total > 1000 ? undefined : data);
+            }, 100);
+          })
+      );
+
+      const asyncSquareCb = vi.fn((data: Data, cb: () => void) => {
+        setTimeout(() => {
+          data.total = Math.pow(data.total, 2);
+          cb();
+        }, 50);
+      });
+
+      tapable.tapAsync('square', asyncSquareCb);
+      tapable.tap('increment', addOneCb);
+      tapable.tapPromise('times', timesThreePromise);
+
+      return {
+        tapable,
+        interceptor,
+        addOneCb,
+        timesThreePromise,
+        asyncSquareCb,
+      };
+    };
+
+    const expectedResult = (function getExpectedResult() {
+      let total = 10;
+
+      while (total < 1000) {
+        total = Math.pow(total, 2);
+        total += 1;
+        total *= 3;
+      }
+
+      return total;
+    })();
+
+    it(`works for intercept call with promise`, async () => {
+      const { tapable, interceptor, addOneCb, timesThreePromise, asyncSquareCb } =
+        prepareLoopingByPromise();
+
+      const data: Data = {
+        total: 10,
+      };
+
+      const result = await tapable.promise(data);
+
+      expect(interceptor.call).toHaveBeenCalledOnce();
+      expect(result).toBeUndefined();
+      expect(data.total).toBe(expectedResult);
+      expect(addOneCb).toHaveBeenCalledTimes(2);
+      expect(timesThreePromise).toHaveBeenCalledTimes(2);
+      expect(asyncSquareCb).toHaveBeenCalledTimes(2);
+    });
+
+    it('works for intercept tap', async () => {
+      const { tapable, interceptor } = prepareLoopingByPromise();
+
+      const data: Data = {
+        total: 10,
+      };
+
+      await tapable.promise(data);
+
+      expect(interceptor.tap).toHaveBeenCalledTimes(6);
+    });
+
+    it('works for intercept loop', async () => {
+      const { tapable, interceptor } = prepareLoopingByPromise();
+
+      const data: Data = {
+        total: 10,
+      };
+
+      await tapable.promise(data);
+
+      expect(interceptor.loop).toHaveBeenCalledTimes(2);
+    });
+
+    it('works for intercept register', async () => {
+      const { interceptor } = prepareLoopingByPromise();
+      expect(interceptor.register).toHaveBeenCalledTimes(3);
+    });
+
+    it('allows interceptor.register to overwrite implementation', async () => {
+      const timesThreePromiseUntil10M = vi.fn((data: Data) => {
+        data.total = data.total * 3;
+        return Promise.resolve(data.total > 1e10 ? undefined : data);
+      });
+
+      const { tapable, interceptor } = prepareLoopingByPromise({
+        register(tap) {
+          return {
+            ...tap,
+            ...(tap.name === 'times'
+              ? {
+                  fn: timesThreePromiseUntil10M,
+                }
+              : {}),
+          };
+        },
+      });
+
+      const data: Data = {
+        total: 10,
+      };
+
+      const expectedResult = (function getExpectedResult(initial) {
+        let total = initial;
+
+        while (total <= 1e10) {
+          total = Math.pow(total, 2);
+          total += 1;
+          total *= 3;
+        }
+
+        return total;
+      })(data.total);
+
+      await tapable.promise(data);
+
+      expect(data.total).toBe(expectedResult);
+      expect(interceptor.loop).toHaveBeenCalledTimes(3);
     });
   });
 });

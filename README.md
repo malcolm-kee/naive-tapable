@@ -26,6 +26,7 @@ The goals of this repo are:
 - [AsyncSeriesHook](src/hooks/async-series-hook.ts)
 - [AsyncSeriesBailHook](src/hooks/async-series-bail-hook.ts)
 - [AsyncSeriesWaterfallHook](src/hooks/async-series-waterfall-hook.ts)
+- [AsyncSeriesLoopHook](src/hooks/async-series-loop-hook.ts)
 
 ### Helpers
 
